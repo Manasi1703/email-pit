@@ -4,7 +4,10 @@ import { createEmails, emailRustle } from "./emails.js";
 import { showMail, isMailOpen, hideMail } from "./mailView.js";
 import { EMAIL_COUNT } from "./emailData.js";
 
-document.getElementById("count").textContent = String(EMAIL_COUNT + 1123).replace(/\B(?=(\d{3})+$)/g, ",");   // the pit only holds a few hundred at a time; the rest are on their way
+const countEl = document.getElementById("count"); let unread = EMAIL_COUNT + 1123;   // the pile only holds a few thousand papers; the rest are on their way
+const showCount = () => { countEl.textContent = unread.toLocaleString("en-US"); };
+showCount();
+const onLand = () => { unread++; showCount(); countEl.classList.remove("bump"); void countEl.offsetWidth; countEl.classList.add("bump"); };   // each envelope that lands is one more unread email
 
 // ---------- renderer, scene, camera ----------
 const canvas = document.getElementById("gl");
@@ -25,12 +28,12 @@ const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMa
 floor.rotation.x = -Math.PI / 2; floor.position.y = RM.Y0; floor.receiveShadow = true; room.add(floor);
 scene.fog = new THREE.Fog(0xffffff, 9, 22);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xe6e2d8, 0.55));
-const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(-0.7, 8, 1.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 0.5, far: 22 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; sun.shadow.radius = 4;
+const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(-0.7, 8, 1.6); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 0.5, far: 22 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; sun.shadow.radius = 4;
 sun.target.position.set(0.1, RM.Y0, -2.5); scene.add(sun, sun.target);
 const key = new THREE.DirectionalLight(0xfff4e6, 0.5); key.position.set(2.5, 2.5, 3); scene.add(key);
 
-const emails = createEmails(room, RM);
+const emails = createEmails(room, RM, onLand);
 
 // ---------- pointer: hover digs, a click reads ----------
 const ndc = new THREE.Vector2(), ray = new THREE.Raycaster(), look = { x: 0, y: 0 };
