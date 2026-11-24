@@ -35,19 +35,19 @@ const key = new THREE.DirectionalLight(0xfff4e6, 0.5); key.position.set(2.5, 2.5
 
 const emails = createEmails(room, RM, onLand);
 
-// ---------- pointer: hover digs, a click reads ----------
+// ---------- pointer: hover (or a dragged thumb) digs, a click or tap reads ----------
 const ndc = new THREE.Vector2(), ray = new THREE.Raycaster(), look = { x: 0, y: 0 };
 let last = null, down = null;
 const toNdc = e => ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
 addEventListener("pointermove", e => {
   toNdc(e); look.x = ndc.x; look.y = ndc.y;
-  if (isMailOpen() || e.pointerType !== "mouse") { last = null; return; }
+  if (isMailOpen() || (e.pointerType !== "mouse" && !down)) { last = null; return; }   // touch and pen only dig while pressed
   if (last && emails.overPit(camera, ndc.x, ndc.y)) { const sp = Math.hypot((ndc.x - last.x) * camera.aspect, ndc.y - last.y); if (sp > 0.003) emails.ruffle(camera, ndc.x, ndc.y, sp); }
   last = { x: ndc.x, y: ndc.y };
 });
-canvas.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY }; if (e.pointerType !== "mouse") last = null; });   // a new touch starts a fresh stroke
 addEventListener("pointerup", e => {
-  const click = down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6; down = null;
+  const click = down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6; down = null; if (e.pointerType !== "mouse") last = null;
   if (!click || e.target !== canvas || isMailOpen()) return;
   toNdc(e); camera.updateMatrixWorld(); ray.setFromCamera(ndc, camera);
   const caught = emails.pick(ray);

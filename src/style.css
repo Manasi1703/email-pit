@@ -4,6 +4,8 @@ html, body { height: 100%; overflow: hidden; background: var(--void); font-famil
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .hud { position: fixed; left: max(24px, env(safe-area-inset-left)); top: max(20px, env(safe-area-inset-top)); max-width: min(70vw, 420px); pointer-events: none; z-index: 1; text-shadow: 0 0 8px #fff, 0 0 3px #fff, 0 0 1px #fff; }   /* the white halo keeps it readable over papers */
 .hud-title { margin: 0; font-weight: 500; font-size: 20px; line-height: 1.1; letter-spacing: -0.01em; text-transform: lowercase; }
+.only-touch { display: none; }
+@media (hover: none) and (pointer: coarse) { .only-mouse { display: none; } .only-touch { display: inline; } }   /* phones and tablets get the thumb instructions */
 .hud-sub { margin: 6px 0 0; font-weight: 400; font-size: 14px; line-height: 1.45; color: #6f6f6b; }
 .counter { position: fixed; right: max(24px, env(safe-area-inset-right)); top: max(20px, env(safe-area-inset-top)); z-index: 1; display: flex; align-items: center; gap: 8px; pointer-events: none; color: #8a8a86; text-shadow: 0 0 8px #fff, 0 0 3px #fff; font-variant-numeric: tabular-nums; }
 .counter-dot { display: none; }
