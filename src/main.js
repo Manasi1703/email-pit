@@ -1,7 +1,4 @@
 import * as THREE from "three";
-import "@fontsource/space-grotesk/400.css";
-import "@fontsource/space-grotesk/500.css";
-import "@fontsource/space-grotesk/700.css";
 import "./style.css";
 import { createEmails, emailRustle } from "./emails.js";
 import { showMail, isMailOpen, hideMail } from "./mailView.js";
@@ -14,24 +11,19 @@ const canvas = document.getElementById("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.setClearColor(0xf3f0ea, 1);
+renderer.setClearColor(0xffffff, 1);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(48, 1, 0.05, 100);
 const BASE = new THREE.Vector3(0, 0.5, 1.5), AIM = new THREE.Vector3(0, -0.35, -2.7);
 
-// ---------- the room: white walls and floor, like the hallway rooms ----------
-const RM = { X0: -2.2, X1: 2.2, Y0: -1.2, Y1: 4.5, Z0: -4.5 };
+// ---------- a plain white screen: no walls, just an invisible floor that catches the pile's shadows ----------
+const RM = { X0: -2.2, X1: 2.2, Y0: -1.2, Y1: 4.5, Z0: -4.5 };   // the space the pile sits in
 const room = new THREE.Group(); scene.add(room);
-const paint = (c, rough = 0.95) => new THREE.MeshStandardMaterial({ color: c, roughness: rough });
-const plane = (w, h, mat, x, y, z, ry = 0, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.receiveShadow = true; room.add(m); return m; };
-const W = RM.X1 - RM.X0, D = 9;
-plane(W + 8, D + 6, paint("#fcfbf8"), 0, RM.Y0, RM.Z0 + D / 2 - 1, 0, -Math.PI / 2);                  // floor (runs out toward the camera)
-plane(W, RM.Y1 - RM.Y0, paint("#f1eee8"), 0, (RM.Y0 + RM.Y1) / 2, RM.Z0);                              // back wall
-plane(D, RM.Y1 - RM.Y0, paint("#ebe8e0"), RM.X0, (RM.Y0 + RM.Y1) / 2, RM.Z0 + D / 2, Math.PI / 2);     // left wall
-plane(D, RM.Y1 - RM.Y0, paint("#ebe8e0"), RM.X1, (RM.Y0 + RM.Y1) / 2, RM.Z0 + D / 2, -Math.PI / 2);    // right wall
-scene.fog = new THREE.Fog(0xf3f0ea, 9, 22);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.12 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = RM.Y0; floor.receiveShadow = true; room.add(floor);
+scene.fog = new THREE.Fog(0xffffff, 9, 22);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xe6e2d8, 0.55));
 const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(-0.7, 8, 1.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 0.5, far: 22 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; sun.shadow.radius = 4;

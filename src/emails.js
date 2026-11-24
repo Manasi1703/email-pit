@@ -8,7 +8,8 @@ export const EMAIL_SCENE = 2;   // index into windows/scenes.js: the room after 
 
 const TAU = Math.PI * 2, PW = 0.34, PH = 0.22;               // envelope size
 const SW = 0.32, SH = 0.23;                                      // a printed sheet
-const FLYING = 14, SPAWN_EVERY = 0.7, CAP_S = 900, CAP_E = 170, CAP = CAP_S + CAP_E, HMAX = 1.25;   // sheets and envelopes on the heap's surface; HMAX is how tall the heap can get
+const FLYING = 14, SPAWN_EVERY = 0.7, CAP_S = 3600, CAP_E = 420, CAP = CAP_S + CAP_E, HMAX = 1.25;   // every sheet and envelope in the heap; HMAX is how tall the heap can get
+const RIDE = 0.035;   // papers this close under the surface ride along with it as it moves; deeper ones stay put until they are uncovered
 const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -20,18 +21,6 @@ function sheetTexture() {   // a printed-out email: header lines, then rows of t
   g.fillRect(14, 54, 228, 2);
   for (let r = 0; r < 9; r++) { g.fillStyle = "rgba(40,40,50,0.3)"; g.fillRect(14, 66 + r * 12, 228 - (r % 3) * 40 - Math.random() * 30, 4); }
   const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t;
-}
-function bulkTexture() {   // what shows where the top layer of papers has been shoved aside: more papers, drawn sharp with a soft shadow under each (no thin lines, which look like wireframe at a low angle)
-  const c = document.createElement("canvas"); c.width = c.height = 1024; const g = c.getContext("2d");
-  g.fillStyle = "#b9b19c"; g.fillRect(0, 0, 1024, 1024);
-  for (let i = 0; i < 520; i++) {
-    g.save(); g.translate(Math.random() * 1024, Math.random() * 1024); g.rotate(Math.random() * TAU);
-    g.fillStyle = "rgba(40,34,24,0.28)"; g.fillRect(-48, -30, 100, 72);                                   // the shadow it casts on the sheet below
-    g.fillStyle = PASTELS[i % PASTELS.length]; g.fillRect(-50, -34, 100, 72);
-    g.fillStyle = "rgba(40,40,50,0.22)"; for (let r = 0; r < 5; r++) g.fillRect(-40, -22 + r * 12, 80 - (r % 3) * 16, 3);   // printed lines
-    g.restore();
-  }
-  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
 }
 let shared = null;
 function envelopeTexture(variant) {
@@ -62,93 +51,93 @@ function makeEnvelope() {
   return { g, hinge };
 }
 
-// "UNREAD" counter on the back wall
-function counterSign(start) {
-  const c = document.createElement("canvas"); c.width = 512; c.height = 160; const g = c.getContext("2d");
-  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
-  const draw = n => {
-    g.clearRect(0, 0, 512, 160); g.fillStyle = "#fffdf8"; g.beginPath(); g.roundRect ? g.roundRect(6, 6, 500, 148, 22) : g.rect(6, 6, 500, 148); g.fill();
-    g.lineWidth = 4; g.strokeStyle = "rgba(40,30,20,0.3)"; g.stroke();
-    g.fillStyle = "#5f6368"; g.font = "600 30px system-ui, sans-serif"; g.fillText("UNREAD", 34, 58);
-    g.fillStyle = "#d93025"; g.font = "700 74px system-ui, sans-serif"; g.fillText(n.toLocaleString("en-US"), 32, 132);
-    g.fillStyle = "#e53935"; g.beginPath(); g.arc(452, 52, 14, 0, TAU); g.fill();
-    t.needsUpdate = true;
-  };
-  draw(start);
-  return { texture: t, draw };
-}
-
-/** The room: a heap of printed emails and envelopes piled against the back wall. More flutter down onto it like moths; hovering over it ruffles through it. */
+/**
+ * A heap made entirely of printed emails and envelopes, piled up on a white floor. More flutter down onto it like moths; hovering digs through it.
+ * The heap's shape is a height field (H). It is never drawn: it only tells the papers where the top of the pile is and gives the pointer something to hit.
+ * The papers fill the whole volume under it, so digging uncovers more papers all the way down.
+ */
 export function createEmails(parent, RM) {
   const group = new THREE.Group(); parent.add(group);
   const floorY = RM.Y0, flying = [], A = { x0: RM.X0 + 0.45, x1: RM.X1 - 0.45, z0: RM.Z0 + 0.03, z1: -1.6 };   // A: the part of the floor the heap sits on
-  const NX = 29, NZ = 23, dx = (A.x1 - A.x0) / (NX - 1), dz = (A.z1 - A.z0) / (NZ - 1), H = new Float32Array(NX * NZ);   // H: height of the heap's top surface at each grid point
-  let count = 1284, spawnT = 0, nextE = 0, dirty = true; const sign = counterSign(count);
-  const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.31), new THREE.MeshBasicMaterial({ map: sign.texture, transparent: true }));
-  plate.position.set(1.0, floorY + 2.4, RM.Z0 + 0.02); group.add(plate);
+  const NX = 49, NZ = 39, dx = (A.x1 - A.x0) / (NX - 1), dz = (A.z1 - A.z0) / (NZ - 1), H = new Float32Array(NX * NZ);   // H: height of the heap's top surface at each grid point
+  let spawnT = 0, nextE = 0, dirty = true;
 
-  // ---- the heap's body: a surface that rises from the floor, so there is never a gap between the papers and the ground
+  // ---- the heap's shape
   for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
     const x = A.x0 + i * dx, z = A.z0 + k * dz;
     const g = (cx, cz, sx, sz, h) => h * Math.exp(-(((x - cx) / sx) ** 2 + ((z - cz) / sz) ** 2));
     H[k * NX + i] = Math.max(0, g(0.0, -3.75, 1.2, 0.95, 0.95) + g(-1.05, -3.3, 0.65, 0.6, 0.4) + g(1.1, -3.05, 0.65, 0.65, 0.36) + g(0.1, -2.4, 1.1, 0.5, 0.08) + 0.05 * Math.sin(x * 3.1 + z * 2.3) * Math.sin(z * 4.1) + 0.006);
   }
-  const bpos = new Float32Array(NX * NZ * 3), buv = new Float32Array(NX * NZ * 2), bidx = [];
-  for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) { const n = k * NX + i; bpos[n * 3] = A.x0 + i * dx; bpos[n * 3 + 2] = A.z0 + k * dz; buv[n * 2] = (A.x0 + i * dx) * 0.36; buv[n * 2 + 1] = (A.z0 + k * dz) * 0.36; }
+  // an invisible copy of the surface, for the pointer's ray to hit
+  const bpos = new Float32Array(NX * NZ * 3), bidx = [];
+  for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) { const n = k * NX + i; bpos[n * 3] = A.x0 + i * dx; bpos[n * 3 + 2] = A.z0 + k * dz; }
   for (let k = 0; k < NZ - 1; k++) for (let i = 0; i < NX - 1; i++) { const a = k * NX + i, b = a + 1, c = a + NX, d = c + 1; bidx.push(a, c, b, b, c, d); }
-  const bgeo = new THREE.BufferGeometry(); bgeo.setAttribute("position", new THREE.BufferAttribute(bpos, 3)); bgeo.setAttribute("uv", new THREE.BufferAttribute(buv, 2)); bgeo.setIndex(bidx);
-  const bulk = new THREE.Mesh(bgeo, new THREE.MeshStandardMaterial({ map: bulkTexture(), color: 0xf0ebdd, roughness: 1, side: THREE.DoubleSide })); bulk.frustumCulled = false; bulk.receiveShadow = true; group.add(bulk);
+  const bgeo = new THREE.BufferGeometry(); bgeo.setAttribute("position", new THREE.BufferAttribute(bpos, 3)); bgeo.setIndex(bidx);
+  const bulk = new THREE.Mesh(bgeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, colorWrite: false, depthWrite: false })); bulk.frustumCulled = false; bulk.renderOrder = -1; group.add(bulk);
   const hAt = (x, z) => {   // the surface height at any point (bilinear between grid points)
     const fx = clamp((x - A.x0) / dx, 0, NX - 1.001), fz = clamp((z - A.z0) / dz, 0, NZ - 1.001), i = Math.floor(fx), k = Math.floor(fz), u = fx - i, w = fz - k, n = k * NX + i;
     return (H[n] * (1 - u) + H[n + 1] * u) * (1 - w) + (H[n + NX] * (1 - u) + H[n + NX + 1] * u) * w;
   };
+  // the box (in heap coordinates) where the surface changed this frame: only papers inside it need to follow the surface
+  const box = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 };
+  const grow = n => { const x = A.x0 + (n % NX) * dx, z = A.z0 + Math.floor(n / NX) * dz; if (x < box.x0) box.x0 = x; if (x > box.x1) box.x1 = x; if (z < box.z0) box.z0 = z; if (z > box.z1) box.z1 = z; };
+  const inBox = (x, z) => x > box.x0 - 0.25 && x < box.x1 + 0.25 && z > box.z0 - 0.25 && z < box.z1 + 0.25;
   const bump = (x, z, amt) => {   // raise (or dig out) a soft round patch of the heap
     for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
       const d2 = ((A.x0 + i * dx - x) ** 2 + (A.z0 + k * dz - z) ** 2) / 0.05; if (d2 > 6) continue;
-      const n = k * NX + i; H[n] = clamp(H[n] + amt * Math.exp(-d2), 0.004, HMAX);
+      const n = k * NX + i; H[n] = clamp(H[n] + amt * Math.exp(-d2), 0.004, HMAX); grow(n);
     }
     dirty = true;
   };
-    const syncBulk = () => { for (let n = 0; n < NX * NZ; n++) bpos[n * 3 + 1] = floorY + H[n]; bgeo.attributes.position.needsUpdate = true; bgeo.computeVertexNormals(); dirty = false; };
+  const syncBulk = () => { for (let n = 0; n < NX * NZ; n++) bpos[n * 3 + 1] = floorY + H[n]; bgeo.attributes.position.needsUpdate = true; bgeo.computeBoundingSphere(); dirty = false; };
 
-  // ---- the papers lying on the surface: two instanced meshes (printed sheets and envelopes) share one set of slots
+  // ---- the papers: two instanced meshes (printed sheets and envelopes) share one set of slots
   const sheets = new THREE.InstancedMesh(new THREE.BoxGeometry(SW, SH, 0.005), new THREE.MeshStandardMaterial({ map: sheetTexture(), roughness: 0.95 }), CAP_S);
   const envs = new THREE.InstancedMesh(new THREE.BoxGeometry(PW, PH, 0.008), new THREE.MeshStandardMaterial({ map: envelopeTexture(0), roughness: 0.92 }), CAP_E);
-  for (const m of [sheets, envs]) { m.frustumCulled = false; m.castShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
-  const P = new Float32Array(CAP * 3), Q = new Float32Array(CAP * 4), S = new Uint8Array(CAP), LIFT = new Float32Array(CAP), VX = new Float32Array(CAP), VZ = new Float32Array(CAP), SPIN = new Float32Array(CAP);   // position, orientation, and whether the slot holds a paper
-  const mails = new Array(CAP).fill(null), dummy = new THREE.Object3D(), qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), nrm = new THREE.Vector3(), Z = new THREE.Vector3(0, 0, 1), col = new THREE.Color(), shade = new THREE.Color();
+  for (const m of [sheets, envs]) { m.frustumCulled = false; m.castShadow = true; m.receiveShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
+  // P: drawn position; Y: where the paper rests (height above the floor); D: how far under the surface it is (negative: lying on top);
+  // Q: drawn orientation, QT: the orientation it is easing towards; WAKE: still easing
+  const P = new Float32Array(CAP * 3), Y = new Float32Array(CAP), D = new Float32Array(CAP), Q = new Float32Array(CAP * 4), QT = new Float32Array(CAP * 4), WAKE = new Uint8Array(CAP), S = new Uint8Array(CAP);
+  const LIFT = new Float32Array(CAP), VX = new Float32Array(CAP), VZ = new Float32Array(CAP), SPIN = new Float32Array(CAP), YAW = new Float32Array(CAP), TLX = new Float32Array(CAP), TLZ = new Float32Array(CAP);
+  const mails = new Array(CAP).fill(null), dummy = new THREE.Object3D(), qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), nrm = new THREE.Vector3(), Z = new THREE.Vector3(0, 0, 1), col = new THREE.Color();
   const meshOf = i => i < CAP_S ? sheets : envs, local = i => i < CAP_S ? i : i - CAP_S;
-  const tint = (i, h) => { col.set(PASTELS[i % PASTELS.length]).multiplyScalar(0.72 + 0.28 * clamp(h / 1.1, 0, 1)); meshOf(i).setColorAt(local(i), col); meshOf(i).instanceColor.needsUpdate = true; };   // lower down is darker
-  for (let i = 0; i < CAP; i++) { dummy.position.set(0, -50, 0); dummy.updateMatrix(); meshOf(i).setMatrixAt(local(i), dummy.matrix); meshOf(i).setColorAt(local(i), shade.set("#ffffff")); }
+  const tint = i => { col.set(PASTELS[i % PASTELS.length]).multiplyScalar(0.62 + 0.38 * clamp(Y[i] / 1.0, 0, 1)); meshOf(i).setColorAt(local(i), col); };   // lower down is darker
+  for (let i = 0; i < CAP; i++) { dummy.position.set(0, -50, 0); dummy.updateMatrix(); meshOf(i).setMatrixAt(local(i), dummy.matrix); meshOf(i).setColorAt(local(i), col.set("#ffffff")); }
   const put = i => {
     dummy.position.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
     dummy.quaternion.set(Q[i * 4], Q[i * 4 + 1], Q[i * 4 + 2], Q[i * 4 + 3]);
     dummy.updateMatrix(); meshOf(i).setMatrixAt(local(i), dummy.matrix);
   };
   const touched = () => { sheets.instanceMatrix.needsUpdate = true; envs.instanceMatrix.needsUpdate = true; };
-  const YAW = new Float32Array(CAP), TLX = new Float32Array(CAP), TLZ = new Float32Array(CAP);   // each paper's own spin on the surface and small tilt
-  function orient(i) {   // a flat sheet's own normal is +z: turn it to the surface normal here, spin it about that normal, then tilt it a little off the surface
+  const colored = () => { sheets.instanceColor.needsUpdate = true; envs.instanceColor.needsUpdate = true; };
+  function aim(i) {   // QT: a flat sheet's own normal is +z: turn it to the surface normal here, spin it about that normal, then tilt it a little off the surface
     const x = P[i * 3], z = P[i * 3 + 2], e = 0.12;
     nrm.set(hAt(x - e, z) - hAt(x + e, z), 2 * e, hAt(x, z - e) - hAt(x, z + e)).normalize();
     qa.setFromUnitVectors(Z, nrm); qb.setFromAxisAngle(Z, YAW[i]); qa.multiply(qb);
-    dummy.rotation.set(TLX[i], TLZ[i], 0); qa.multiply(qb.setFromEuler(dummy.rotation)); Q.set([qa.x, qa.y, qa.z, qa.w], i * 4);
+    dummy.rotation.set(TLX[i], TLZ[i], 0); qa.multiply(qb.setFromEuler(dummy.rotation)); qa.toArray(QT, i * 4);
   }
-  function rest(slot, x, z, mail, raise = 0) {   // lay a paper on the heap's surface at (x, z)
-    S[slot] = 1; if (raise) bump(x, z, raise);
+  function place(slot, x, z, y, mail) {   // put a paper into the heap at (x, z), resting at height y (clamped to the surface)
     const h = hAt(x, z);
-    YAW[slot] = rand(0, TAU); TLX[slot] = rand(-0.16, 0.16); TLZ[slot] = rand(-0.16, 0.16);
-    LIFT[slot] = 0.005 + rand(0, 0.012); VX[slot] = VZ[slot] = SPIN[slot] = 0; P.set([x, floorY + h + LIFT[slot], z], slot * 3); orient(slot);
-    mails[slot] = mail || null; tint(slot, h); put(slot);
+    S[slot] = 1; YAW[slot] = rand(0, TAU); TLX[slot] = rand(-0.16, 0.16); TLZ[slot] = rand(-0.16, 0.16);
+    LIFT[slot] = 0.003 + rand(0, 0.012); VX[slot] = VZ[slot] = SPIN[slot] = 0; WAKE[slot] = 0;
+    Y[slot] = Math.min(y, h + LIFT[slot]); D[slot] = h - Y[slot];
+    P.set([x, floorY + Y[slot], z], slot * 3); aim(slot); Q.set(QT.subarray(slot * 4, slot * 4 + 4), slot * 4);
+    mails[slot] = mail || null; tint(slot); put(slot);
   }
+  // fill the heap: spots are picked in proportion to how much paper is above them, then a random depth, so the papers fill the volume
+  const vol = (x, z) => hAt(x, z) + 0.05;
+  for (let n = 0; n < CAP; n++) {
+    let x = 0, z = 0;
+    for (let t = 0; t < 60; t++) { x = rand(A.x0 + 0.08, A.x1 - 0.08); z = rand(A.z0 + 0.08, A.z1 - 0.08); if (Math.random() * (HMAX * 0.85) < vol(x, z)) break; }
+    const h = hAt(x, z); place(n, x, z, Math.random() < 0.3 ? h : h * Math.pow(Math.random(), 0.7));   // a share sit right at the top, so the surface is well covered
+  }
+  syncBulk(); touched(); colored();
+
+  // ---- fluttering envelopes that fall onto the heap
   const surfaceSpot = (bias = 0.5) => {   // a random spot on the heap, more likely where it is tall
     for (let n = 0; n < 40; n++) { const x = rand(A.x0 + 0.1, A.x1 - 0.1), z = rand(A.z0 + 0.1, A.z1 - 0.1); if (Math.random() < Math.pow(clamp(hAt(x, z) / bias, 0, 1), 0.8) * 0.95 + 0.025) return [x, z]; }
     return [rand(A.x0, A.x1), rand(A.z0, A.z1)];
   };
-  const RESERVE = 220; let reserveNext = CAP_S - RESERVE;   // sheets held back: digging uncovers them, so a hole shows more papers and not the bare surface underneath
-  for (let n = 0; n < CAP; n++) { if (n >= CAP_S - RESERVE && n < CAP_S) continue; const [x, z] = surfaceSpot(); rest(n, x, z); }   // the heap starts out piled high
-  syncBulk(); touched();
-
-  // ---- fluttering envelopes that fall onto the heap
   function launch(h) {
     const { g, hinge } = makeEnvelope(); group.add(g); const [tx, tz] = surfaceSpot(0.9);
     const e = { g, hinge, mail: makeEmail(), t: rand(0, 20), x: rand(A.x0, A.x1), y: floorY + h, z: rand(A.z0, A.z1), tx, tz, ph: [rand(0, TAU), rand(0, TAU), rand(0, TAU)], held: false };
@@ -156,14 +145,16 @@ export function createEmails(parent, RM) {
   }
   function land(e) {
     flying.splice(flying.indexOf(e), 1); group.remove(e.g);
-    const slot = CAP_S + nextE; nextE = (nextE + 1) % CAP_E;   // the oldest envelope is recycled
-    rest(slot, e.x, e.z, e.mail, 0.05 * (1 - hAt(e.x, e.z) / HMAX)); touched();
-    count++; sign.draw(count);
+    let slot = -1;   // reuse an envelope that is buried deep, so nothing visible vanishes; failing that, the oldest
+    for (let t = 0; t < CAP_E && slot < 0; t++) { const j = CAP_S + (nextE + t) % CAP_E; if (D[j] > 0.08) { slot = j; nextE = (j - CAP_S + 1) % CAP_E; } }
+    if (slot < 0) { slot = CAP_S + nextE; nextE = (nextE + 1) % CAP_E; }
+    bump(e.x, e.z, 0.05 * (1 - hAt(e.x, e.z) / HMAX));
+    place(slot, e.x, e.z, 99, e.mail); colored(); touched();
   }
   for (let i = 0; i < FLYING - 2; i++) launch(rand(1.5, 3.8));
 
-  // ---- ruffling: papers near the pointer are thrown up and tumble back down onto the heap
-  const M = new THREE.Matrix4(), v = new THREE.Vector3(), right = new THREE.Vector3(), upv = new THREE.Vector3(), inv = new THREE.Matrix4();
+  // ---- digging
+  const M = new THREE.Matrix4(), v = new THREE.Vector3();
   const toNdc = (x, y, z) => v.set(x, y, z).applyMatrix4(M);
   const setM = cam => { cam.updateMatrixWorld(); group.updateWorldMatrix(true, false); M.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse).multiply(group.matrixWorld); };
   const bboxNdc = cam => {   // the heap's outline on the screen
@@ -172,22 +163,27 @@ export function createEmails(parent, RM) {
     return [x0, x1, y0, y1];
   };
 
-  // Digging. Where the pointer touches the heap, material is scooped out of the middle and piled up in a ring around the hole; the papers there are shoved outwards and slide to a stop.
-  // Then the loose pile spreads: the heap's surface relaxes towards its neighbours around the disturbed spot, so the ridge slumps into the hole instead of the hole just fading away.
-  const ptr = { cam: null, nx: 0, ny: 0, speed: 0, at: 0 }, rc = new THREE.Raycaster(), ndcP = new THREE.Vector2(), hit = new THREE.Vector3(), prev = new THREE.Vector3(), pv = new THREE.Vector3(), loose = new Float32Array(NX * NZ), Hn = new Float32Array(NX * NZ);
-  let lastRustle = 0, havePrev = false, scanI = 0;
+  // Where the pointer touches the heap, the surface is scooped out of the middle and piled up in a ring around the hole; the papers on top are shoved outwards and slide to a stop,
+  // and the ones underneath come into view. Then the loose pile spreads: the surface relaxes towards its neighbours, so the ridge slumps back into the hole.
+  // The dig point itself glides after the pointer, so a fast flick still carves a smooth trench.
+  const ptr = { cam: null, nx: 0, ny: 0, speed: 0, at: 0 }, rc = new THREE.Raycaster(), ndcP = new THREE.Vector2(), hit = new THREE.Vector3(), goal = new THREE.Vector3(), prev = new THREE.Vector3(), pv = new THREE.Vector3(), loose = new Float32Array(NX * NZ), Hn = new Float32Array(NX * NZ);
+  let lastRustle = 0, havePrev = false, actS = 0;
   function stir(dt) {
     dt = Math.min(dt, 1 / 30);
-    const live = ptr.cam && performance.now() - ptr.at < 140; let touching = false;
+    box.x0 = box.z0 = 1e9; box.x1 = box.z1 = -1e9;
+    const live = ptr.cam && performance.now() - ptr.at < 160; let touching = false;
     if (live) {
       ptr.cam.updateMatrixWorld(); ndcP.set(ptr.nx, ptr.ny); rc.setFromCamera(ndcP, ptr.cam); group.updateWorldMatrix(true, true);   // the camera's matrix is refreshed first: it is only brought up to date by the render at the end of the frame, which is after this runs
       const h = rc.intersectObject(bulk, false)[0];
-      if (h) { hit.copy(group.worldToLocal(h.point.clone())); touching = true; }
+      if (h) { goal.copy(group.worldToLocal(h.point.clone())); touching = true; }
     }
-    if (touching && havePrev) { const k = 1 - Math.exp(-18 * dt); pv.x += ((hit.x - prev.x) / dt - pv.x) * k; pv.z += ((hit.z - prev.z) / dt - pv.z) * k; }
+    if (touching) { if (havePrev) hit.lerp(goal, 1 - Math.exp(-22 * dt)); else hit.copy(goal); }
+    if (touching && havePrev) { const k = 1 - Math.exp(-12 * dt); pv.x += ((hit.x - prev.x) / dt - pv.x) * k; pv.z += ((hit.z - prev.z) / dt - pv.z) * k; }
     else pv.multiplyScalar(Math.exp(-8 * dt));
     prev.copy(hit); havePrev = touching;
-    const speed = Math.hypot(pv.x, pv.z), R = 0.8, act = touching ? clamp(0.4 + speed * 2.5, 0.4, 1.6) : 0;
+    const speed = Math.hypot(pv.x, pv.z), R = 0.7;
+    actS += ((touching ? clamp(0.4 + speed * 2.2, 0.4, 1.5) : 0) - actS) * (1 - Math.exp(-10 * dt));   // eased, so digging fades in and out instead of switching
+    const act = actS > 0.02 ? actS : 0;
 
     // 1. dig: scoop the middle, heap the scooped material in a ring
     let changed = false;
@@ -195,46 +191,52 @@ export function createEmails(parent, RM) {
       let scooped = 0, ringW = 0;
       for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
         const n = k * NX + i, d = Math.hypot(A.x0 + i * dx - hit.x, A.z0 + k * dz - hit.z), u = d / R;
-        if (u < 0.55) { const take = Math.min(H[n] - 0.004, 0.95 * act * dt * (1 - u / 0.55)); if (take > 0) { H[n] -= take; scooped += take; loose[n] = 1; } }
-        else if (u < 1.1) { Hn[n] = (1 - Math.abs(u - 0.8) / 0.3); ringW += Math.max(0, Hn[n]); } else Hn[n] = 0;
+        if (u < 0.6) { const f = 1 - u / 0.6, take = Math.min(H[n] - 0.004, 0.9 * act * dt * f * f * (3 - 2 * f)); if (take > 0) { H[n] -= take; scooped += take; loose[n] = 1; grow(n); } Hn[n] = 0; }
+        else if (u < 1.15) { Hn[n] = Math.max(0, 1 - Math.abs(u - 0.85) / 0.3); ringW += Hn[n]; } else Hn[n] = 0;
       }
-      if (scooped > 0 && ringW > 0) for (let n = 0; n < NX * NZ; n++) if (Hn[n] > 0) { H[n] = Math.min(HMAX, H[n] + scooped * 0.9 * Hn[n] / ringW); loose[n] = 1; }
+      if (scooped > 0 && ringW > 0) for (let n = 0; n < NX * NZ; n++) if (Hn[n] > 0) { H[n] = Math.min(HMAX, H[n] + scooped * 0.9 * Hn[n] / ringW); loose[n] = 1; grow(n); }
       changed = scooped > 0;
-      for (let n = Math.min(3, Math.floor(act * dt * 150 + Math.random())); n > 0; n--) {   // papers from the heap's thin edge flow into the hole, so it fills with papers instead of showing bare surface
-        let slot = reserveNext < CAP_S ? reserveNext++ : -1;
-        for (let tries = 0; slot < 0 && tries < 60; tries++) {
-          scanI = (scanI + 1) % (CAP_S - RESERVE); const j = scanI, o = j * 3;
-          if (S[j] === 1 && hAt(P[o], P[o + 2]) < 0.14 && Math.hypot(P[o] - hit.x, P[o + 2] - hit.z) > R * 1.2) slot = j;
-        }
-        if (slot >= 0) { const a = rand(0, TAU), r = Math.sqrt(Math.random()) * R * 0.55; rest(slot, hit.x + Math.cos(a) * r, hit.z + Math.sin(a) * r, mails[slot]); }
-      }
     }
     // 2. spread: the loose pile relaxes towards its neighbours, which lets the ridge slump into the hole
     for (let k = 0; k < NZ; k++) for (let i = 0; i < NX; i++) {
-      const n = k * NX + i, w = loose[n]; if (w < 0.01) { loose[n] = 0; continue; }
+      const n = k * NX + i, w = loose[n]; if (w < 0.01) { loose[n] = 0; Hn[n] = H[n]; continue; }
       const avg = ((i > 0 ? H[n - 1] : H[n]) + (i < NX - 1 ? H[n + 1] : H[n]) + (k > 0 ? H[n - NX] : H[n]) + (k < NZ - 1 ? H[n + NX] : H[n])) / 4;
-      Hn[n] = H[n] + (avg - H[n]) * Math.min(0.5, 7 * dt * w); loose[n] = w * Math.exp(-0.8 * dt);
+      Hn[n] = H[n] + (avg - H[n]) * Math.min(0.45, 14 * dt * w); loose[n] = w * Math.exp(-0.7 * dt);
     }
-    for (let n = 0; n < NX * NZ; n++) if (loose[n] > 0 && Hn[n] !== H[n]) { H[n] = Hn[n]; changed = true; }
+    for (let n = 0; n < NX * NZ; n++) if (loose[n] > 0 && Math.abs(Hn[n] - H[n]) > 1e-6) { H[n] = Hn[n]; changed = true; grow(n); }
     if (changed) dirty = true;
 
-    // 3. the papers: shoved outwards from the hole and along the way the pointer moves, sliding to a stop; and every paper rides the surface as it moves
-    let moved = false;
+    // 3. the papers: the ones on top are shoved outwards and along the way the pointer moves, sliding to a stop on top of the pile;
+    //    near the surface they ride it up and down, deeper ones stay where they are until the surface comes down to them. Height and tilt ease, so nothing snaps.
+    let any = false, recolor = false; const ease = 1 - Math.exp(-14 * dt);
     for (let i = 0; i < CAP; i++) {
       if (!S[i]) continue; const o = i * 3;
-      if (touching) {
+      if (touching && act && D[i] < RIDE) {
         const ddx = P[o] - hit.x, ddz = P[o + 2] - hit.z, d = Math.hypot(ddx, ddz);
-        if (d < R) { const u = 1 - d / R, inf = u * u * (3 - 2 * u); VX[i] += ((ddx / (d || 1)) * 4.5 * act + pv.x * 2) * inf * dt * 6; VZ[i] += ((ddz / (d || 1)) * 4.5 * act + pv.z * 2) * inf * dt * 6; SPIN[i] += (i % 2 ? 1 : -1) * inf * act * 14 * dt; }
+        if (d < R) { const u = 1 - d / R, inf = u * u * (3 - 2 * u); VX[i] += ((ddx / (d || 1)) * 3.6 * act + pv.x * 1.6) * inf * dt * 6; VZ[i] += ((ddz / (d || 1)) * 3.6 * act + pv.z * 1.6) * inf * dt * 6; SPIN[i] += (i % 2 ? 1 : -1) * inf * act * 10 * dt; }
       }
-      const sp = Math.abs(VX[i]) + Math.abs(VZ[i]) + Math.abs(SPIN[i]);
-      if (sp > 0.004) {
-        P[o] = clamp(P[o] + VX[i] * dt, A.x0 + 0.1, A.x1 - 0.1); P[o + 2] = clamp(P[o + 2] + VZ[i] * dt, A.z0 + 0.1, A.z1 - 0.1);
-        const f = Math.exp(-5.5 * dt); VX[i] *= f; VZ[i] *= f; SPIN[i] *= f;   // friction against the other papers
-        moved = true;
+      const sp = Math.abs(VX[i]) + Math.abs(VZ[i]) + Math.abs(SPIN[i]), sliding = sp > 0.004;
+      if (sliding) {
+        P[o] = clamp(P[o] + VX[i] * dt, A.x0 + 0.08, A.x1 - 0.08); P[o + 2] = clamp(P[o + 2] + VZ[i] * dt, A.z0 + 0.08, A.z1 - 0.08);
+        const f = Math.exp(-5 * dt); VX[i] *= f; VZ[i] *= f; SPIN[i] *= f; YAW[i] += SPIN[i] * dt;   // friction against the other papers
+        D[i] = -LIFT[i];   // a shoved paper slides over the top of the pile
       } else if (sp) { VX[i] = VZ[i] = SPIN[i] = 0; }
-      if (moved || changed) { const y = floorY + hAt(P[o], P[o + 2]) + LIFT[i]; if (Math.abs(y - P[o + 1]) > 1e-4) { P[o + 1] = y; moved = true; } if (sp > 0.004) YAW[i] += SPIN[i] * dt; if (sp > 0.004 || changed) { orient(i); put(i); } }
+      const follow = sliding || (changed && inBox(P[o], P[o + 2]));
+      if (!follow && !WAKE[i]) continue;
+      if (follow) {
+        const h = hAt(P[o], P[o + 2]), was = Y[i];
+        let y = D[i] < RIDE ? h - D[i] : Y[i]; y = Math.min(y, h + LIFT[i]);
+        Y[i] = y; D[i] = h - y;
+        if (D[i] < RIDE) aim(i);
+        if (Math.abs(y - was) > 0.04) { tint(i); recolor = true; }
+      }
+      const ty = floorY + Y[i], dy = ty - P[o + 1]; P[o + 1] += dy * ease;
+      qa.fromArray(Q, i * 4); qb.fromArray(QT, i * 4); const dot = Math.abs(qa.dot(qb));
+      if (dot < 0.99999) { qa.slerp(qb, ease); qa.toArray(Q, i * 4); }
+      WAKE[i] = Math.abs(dy) > 2e-4 || dot < 0.99999 || sliding ? 1 : 0;
+      put(i); any = true;
     }
-    if (moved || changed) touched();
+    if (any) touched(); if (recolor) colored();
     if (touching && speed > 0.25 && performance.now() - lastRustle > 60) { lastRustle = performance.now(); emailRustle.play(clamp(speed / 2.5, 0.2, 1), clamp(ptr.nx * 0.6, -0.8, 0.8)); }
   }
   const tmp = new THREE.Vector3(), q = new THREE.Vector3();
@@ -264,14 +266,14 @@ export function createEmails(parent, RM) {
     },
     /** True if the screen point (ndc) is over the heap. */
     overPit(cam, nx, ny) { const [x0, x1, y0, y1] = bboxNdc(cam); return nx >= x0 && nx <= x1 && ny >= y0 && ny <= y1; },
-    /** Ruffle through the papers at the pointer. speed is how far the pointer moved (ndc units). */
+    /** Dig through the papers at the pointer. speed is how far the pointer moved (ndc units). */
     ruffle(cam, nx, ny, speed) { ptr.cam = cam; ptr.nx = nx; ptr.ny = ny; ptr.speed = speed; ptr.at = performance.now(); },
-    /** The paper under the ray, fluttering or lying on the heap (the one nearest the camera), as { mail, ... }, or null. */
+    /** The paper under the ray, fluttering or near the top of the heap (the one nearest the camera), as { mail, ... }, or null. */
     pick(ray) {
       let best = null, bd = 1e9;
       for (const e of flying) { tmp.copy(e.g.position); group.localToWorld(tmp); const d = closest(ray, tmp, 0.2 * 0.2); if (d >= 0 && d < bd) { bd = d; best = { mail: e.mail, e }; } }
       for (let i = 0; i < CAP; i++) {
-        if (!S[i]) continue; tmp.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); group.localToWorld(tmp);
+        if (!S[i] || D[i] > 0.05) continue; tmp.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); group.localToWorld(tmp);
         const r = i < CAP_S ? 0.15 : 0.12, d = closest(ray, tmp, r * r); if (d >= 0 && d < bd) { bd = d; best = { slot: i }; }
       }
       if (best && best.slot !== undefined) best.mail = mails[best.slot] || (mails[best.slot] = makeEmail());   // each paper keeps its email once it has been read
