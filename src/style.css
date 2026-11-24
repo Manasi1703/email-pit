@@ -5,14 +5,11 @@ html, body { height: 100%; overflow: hidden; background: var(--void); font-famil
 .hud { position: fixed; left: max(24px, env(safe-area-inset-left)); top: max(20px, env(safe-area-inset-top)); max-width: min(70vw, 420px); pointer-events: none; z-index: 1; text-shadow: 0 0 8px #fff, 0 0 3px #fff, 0 0 1px #fff; }   /* the white halo keeps it readable over papers */
 .hud-title { margin: 0; font-weight: 500; font-size: 26px; line-height: 1.1; letter-spacing: -0.01em; text-transform: uppercase; }
 .hud-sub { margin: 6px 0 0; font-weight: 400; font-size: 14px; line-height: 1.45; color: #6f6f6b; }
-.counter { position: fixed; right: max(24px, env(safe-area-inset-right)); top: max(20px, env(safe-area-inset-top)); z-index: 1; display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 12px; border-radius: 999px; background: rgba(255,255,255,.85); box-shadow: 0 1px 2px rgba(60,64,67,.2), 0 1px 6px rgba(60,64,67,.12); pointer-events: none; font-variant-numeric: tabular-nums; }
-.counter-dot { width: 8px; height: 8px; border-radius: 50%; background: #e53935; }
-.counter-label { font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: #5f6368; }
-.counter-num { display: inline-block; font-size: 18px; font-weight: 600; color: #d93025; }
-.counter-num.bump { animation: bump .35s ease-out; }
-@keyframes bump { 30% { transform: scale(1.18); } }
-@media (prefers-reduced-motion: reduce) { .counter-num.bump { animation: none; } }
-@media (max-width: 560px) { .hud-title { font-size: 20px; } .hud-sub { font-size: 13px; max-width: 60vw; } .counter { padding: 6px 10px; } .counter-label { display: none; } }
+.counter { position: fixed; right: max(24px, env(safe-area-inset-right)); top: max(20px, env(safe-area-inset-top)); z-index: 1; display: flex; align-items: center; gap: 8px; pointer-events: none; color: #8a8a86; text-shadow: 0 0 8px #fff, 0 0 3px #fff; font-variant-numeric: tabular-nums; }
+.counter-dot { display: none; }
+.counter-label { font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: inherit; }
+.counter-num { display: inline-block; font-size: 18px; font-weight: 500; color: inherit; }   /* a silent counter: grey, no badge, no bump */
+@media (max-width: 560px) { .hud-title { font-size: 20px; } .hud-sub { font-size: 13px; max-width: 60vw; }  .counter-label { display: none; } }
 
 /* Email reader: opens when a paper is clicked. Laid out and set like Gmail's message view: Google Sans for the subject, sender and buttons, Roboto for the small grey text, Arial for the message itself. */
 .mail { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px; background: rgba(246,248,252,.7); backdrop-filter: blur(6px); font: 400 14px/20px Roboto, Arial, sans-serif; color: #1f1f1f; }
