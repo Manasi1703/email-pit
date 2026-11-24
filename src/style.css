@@ -1,0 +1,36 @@
+:root { --void: #f3f0ea; --ink: #0b0b0b; color-scheme: light; }
+html, body { height: 100%; overflow: hidden; background: var(--void); font-family: "Space Grotesk", system-ui, sans-serif; color: var(--ink); }
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.hud { position: fixed; left: max(24px, env(safe-area-inset-left)); bottom: max(22px, env(safe-area-inset-bottom)); max-width: min(92vw, 420px); pointer-events: none; }
+.hud-title { font-weight: 700; font-size: 26px; letter-spacing: -0.01em; text-transform: uppercase; }
+.hud-sub { margin-top: 6px; font-weight: 400; font-size: 14px; line-height: 1.45; color: #6f6f6b; }
+
+/* Email reader: opens when a paper is clicked. Laid out like a normal email client's message view, set in Space Grotesk. */
+.mail { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px; background: rgba(243,240,234,.62); backdrop-filter: blur(6px); font: 400 14px/1.5 "Space Grotesk", system-ui, sans-serif; color: #202124; }
+.mail[hidden] { display: none; }
+.mail-card { width: min(100%, 760px); max-height: min(86vh, 640px); display: flex; flex-direction: column; background: #fff; border-radius: 14px; box-shadow: 0 18px 60px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.12); overflow: hidden; }
+.mail-bar { display: flex; align-items: center; gap: 2px; padding: 8px 10px; border-bottom: 1px solid #e8eaed; }
+.mail-sp { flex: 1; }
+.mail-div { width: 1px; height: 20px; margin: 0 6px; background: #dadce0; }
+.mail-ic { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: #5f6368; cursor: pointer; }
+.mail-ic:hover, .mail-ic:focus-visible { background: #f1f3f4; outline: none; }
+.mail-ic.sm { width: 32px; height: 32px; }
+.mail-scroll { padding: 20px 28px 24px; overflow-y: auto; }
+.mail-subject { margin: 0 0 18px; font-size: 22px; line-height: 1.3; font-weight: 500; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.mail-chip { padding: 0 8px; border-radius: 4px; background: #e8eaed; color: #444746; font-size: 12px; line-height: 20px; font-weight: 400; }
+.mail-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; }
+.mail-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 18px; font-weight: 500; }
+.mail-who { flex: 1; min-width: 0; }
+.mail-from { overflow-wrap: anywhere; }
+.mail-from b { font-weight: 700; }
+.mail-from span, .mail-to, .mail-when { color: #5f6368; font-size: 12.5px; }
+.mail-to { margin-top: 1px; }
+.mail-when { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; text-align: right; }
+.mail-body { padding-left: 54px; font-size: 15px; line-height: 1.6; }
+.mail-body p { margin: 0 0 14px; }
+.mail-sig { margin-top: 18px; color: #3c4043; }
+.mail-att { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 0 54px; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 8px; color: #3c4043; font-size: 13px; }
+.mail-act { display: flex; gap: 10px; margin: 26px 0 0 54px; }
+.mail-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border: 1px solid #dadce0; border-radius: 999px; background: #fff; color: #3c4043; font: inherit; cursor: pointer; }
+.mail-pill:hover { background: #f8f9fa; }
+@media (max-width: 560px) { .mail-scroll { padding: 16px; } .mail-body, .mail-att, .mail-act { margin-left: 0; padding-left: 0; } .mail-when { display: none; } }
